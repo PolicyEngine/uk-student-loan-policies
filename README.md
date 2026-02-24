@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Plan 2 student loans affect everyone who started university in England between 2012 and 2022. Graduates [repay](https://www.gov.uk/repaying-your-student-loan/what-you-pay) 9% of everything they earn above £29,385 for up to 30 years. Interest accrues at RPI plus up to 3% depending on income.
+Plan 2 student loans affect everyone who started university in England between 2012 and 2022. Graduates [repay](https://www.gov.uk/repaying-your-student-loan/what-you-pay) 9% of everything they earn above the repayment threshold for up to 30 years. Interest accrues at RPI plus up to 3% depending on income.
 
 In February 2026, Martin Lewis and Kemi Badenoch [clashed](https://www.theguardian.com/money/2025/feb/20/why-the-student-loans-row-is-escalating-and-what-it-means-for-graduates) on Good Morning Britain over how to fix this.
 
@@ -14,7 +14,7 @@ This analysis simulates both proposed fixes against the current system to quanti
 
 Badenoch proposes removing the RPI+3% sliding scale. Her fix: **cap Plan 2 interest at RPI only**, removing the +3% top-up entirely.
 
-This does not change what borrowers repay each month. The annual repayment remains 9% above £29,385 regardless of the interest rate. What changes is how fast the balance shrinks. Lower interest means more of each payment goes to principal, so higher earners clear the loan years earlier.
+This does not change what borrowers repay each month. The annual repayment remains 9% above the threshold regardless of the interest rate. What changes is how fast the balance shrinks. Lower interest means more of each payment goes to principal, so higher earners clear the loan years earlier.
 
 ### Raise threshold to £40k
 
@@ -46,7 +46,7 @@ This chart shows the reduction in total lifetime repayment under each fix compar
 
 ### 4. Annual repayment over time (4 income levels)
 
-This chart shows year-by-year repayment for four first-year incomes under the two proposed fixes. The current system is omitted for clarity, as it overlaps with the cap interest line on annual repayment (both use the same £29,385 threshold).
+This chart shows year-by-year repayment for four first-year incomes under the two proposed fixes. The current system is omitted for clarity, as it overlaps with the cap interest line on annual repayment (both use the same threshold).
 
 ![Annual repayment profiles](results/panel_annual.png)
 
