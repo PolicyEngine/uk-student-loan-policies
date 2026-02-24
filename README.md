@@ -6,7 +6,7 @@ The 2023 reform replaced **Plan 2** with **Plan 5** for new university students 
 
 | | Plan 2 (2012-2022 starters) | Plan 5 (2023+ starters) |
 |---|---|---|
-| **Repayment threshold** | ~£27,295 | £25,000 |
+| **Repayment threshold** | £29,385 | £25,000 |
 | **Interest rate** | RPI + up to 3% (sliding scale) | RPI only |
 | **Write-off period** | 30 years | 40 years |
 | **Repayment rate** | 9% above threshold | 9% above threshold |
@@ -27,9 +27,9 @@ The model (`policy_comparison.py`) does the following:
 
 1. **Loads Plan 2 and Plan 5 parameters** from PolicyEngine UK (thresholds, interest rates, repayment rates)
 2. **Simulates year-by-year loan repayment** for each plan, accounting for salary growth (3.5%/yr), OBR RPI forecasts, threshold indexation rules, and the Plan 2 interest sliding scale
-3. **Sweeps across starting salaries** (£20k-£70k) to show how outcomes vary by earnings
+3. **Sweeps across starting salaries** (£20k-£120k) to show how outcomes vary by earnings
 4. **Uses PolicyEngine UK microdata** to distribute results across the actual income distribution, weighted by household income decile
-5. **Generates four chart panels** as separate PNGs plus a combined overview
+5. **Generates three interactive chart panels** as HTML (with hover) and static PNGs
 
 ### Assumptions
 
@@ -46,9 +46,10 @@ pip install -r requirements.txt
 python policy_comparison.py
 ```
 
-Outputs:
-- `policy_comparison.png` -- combined 4-panel chart
-- `panel_salary.png`, `panel_years.png`, `panel_decile.png`, `panel_profiles.png` -- individual panels
+Outputs saved to `results/` (interactive HTML + static PNG):
+- `results/panel_salary.html` / `.png` -- total lifetime repayment by starting salary
+- `results/panel_years.html` / `.png` -- years of repayment by starting salary
+- `results/panel_decile.html` / `.png` -- avg. lifetime repayment per borrower by household income decile (Plan 2 vs Plan 5)
 
 ## Media context
 
@@ -60,4 +61,4 @@ Outputs:
 ## Built with
 
 - [PolicyEngine UK](https://policyengine.org/uk) -- tax-benefit microsimulation model and microdata
-- Python, NumPy, pandas, matplotlib
+- Python, NumPy, pandas, Plotly

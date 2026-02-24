@@ -16,8 +16,8 @@ warnings.filterwarnings("ignore")
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+import plotly.express as px
+import plotly.graph_objects as go
 
 from policyengine_uk import Microsimulation
 
@@ -146,7 +146,7 @@ def simulate_lifetime(starting_salary, loan_balance, plan_params, interest_fn):
 # ── 1. Salary sweep: Plan 2 vs Plan 5 by starting salary ─────────────────────
 print("\nSimulating lifetime repayments across salary range...")
 
-salaries = np.arange(20_000, 70_001, 500)
+salaries = np.arange(20_000, 120_001, 100)
 results_by_salary = []
 
 for sal in salaries:
@@ -274,172 +274,136 @@ for label, sal in profiles:
     print(f"    Difference: {'£' + f'{diff:,.0f} MORE' if diff > 0 else '£' + f'{abs(diff):,.0f} LESS'} under Plan 5")
 
 
-# ── 4. Plot ───────────────────────────────────────────────────────────────────
-plt.rcParams.update({
-    "font.family": "sans-serif",
-    "font.sans-serif": ["Roboto", "Helvetica Neue", "Arial", "sans-serif"],
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "axes.edgecolor": "#cbd5e1",
-    "axes.labelcolor": "#475569",
-    "xtick.color": "#64748b",
-    "ytick.color": "#64748b",
-    "text.color": "#1e293b",
-})
+# ── 4. Plot (Plotly Express) ──────────────────────────────────────────────────
+import os
+RESULTS_DIR = "results"
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 TEAL = "#319795"   # PolicyEngine primary
 AMBER = "#F59E0B"  # Contrast
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-ax_salary, ax_years, ax_decile, ax_profiles = axes.flat
+LAYOUT_COMMON = dict(
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    font=dict(family="Roboto, Helvetica Neue, Arial, sans-serif", color="#1e293b"),
+    xaxis=dict(gridcolor="#f1f5f9", linecolor="#cbd5e1"),
+    yaxis=dict(gridcolor="#f1f5f9", linecolor="#cbd5e1"),
+    legend=dict(bgcolor="rgba(255,255,255,0.95)", bordercolor="#e2e8f0", borderwidth=1),
+)
 
 # ── Panel 1: Total lifetime repayment by starting salary ──
-ax_salary.plot(
-    salary_df["salary"] / 1000, salary_df["plan2_repaid"] / 1000,
-    color=TEAL, linewidth=2.5, label="Plan 2 (2012-2022)",
+salary_long = salary_df.melt(
+    id_vars=["salary"],
+    value_vars=["plan2_repaid", "plan5_repaid"],
+    var_name="plan",
+    value_name="total_repaid",
 )
-ax_salary.plot(
-    salary_df["salary"] / 1000, salary_df["plan5_repaid"] / 1000,
-    color=AMBER, linewidth=2.5, label="Plan 5 (2023+)",
-)
-# Fill the gap where Plan 5 > Plan 2
-ax_salary.fill_between(
-    salary_df["salary"] / 1000,
-    salary_df["plan2_repaid"] / 1000,
-    salary_df["plan5_repaid"] / 1000,
-    where=salary_df["plan5_repaid"] > salary_df["plan2_repaid"],
-    alpha=0.15, color=AMBER, label="Extra repaid under Plan 5",
-)
-ax_salary.fill_between(
-    salary_df["salary"] / 1000,
-    salary_df["plan2_repaid"] / 1000,
-    salary_df["plan5_repaid"] / 1000,
-    where=salary_df["plan5_repaid"] < salary_df["plan2_repaid"],
-    alpha=0.15, color=TEAL, label="Less repaid under Plan 5",
-)
-ax_salary.axhline(LOAN_BALANCE / 1000, color="#94a3b8", linewidth=0.8, linestyle="--", zorder=0)
-ax_salary.text(21, LOAN_BALANCE / 1000 + 1, "Original loan", fontsize=8, color="#94a3b8")
-ax_salary.set_xlabel("Graduate starting salary", fontsize=11)
-ax_salary.set_ylabel("Total lifetime repayment (£k)", fontsize=11)
-ax_salary.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"£{v:.0f}k"))
-ax_salary.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"£{v:.0f}k"))
-ax_salary.yaxis.grid(True, color="#f1f5f9", linewidth=1)
-ax_salary.set_axisbelow(True)
-ax_salary.legend(fontsize=8.5, frameon=True, framealpha=0.95, edgecolor="#e2e8f0")
-ax_salary.set_title("Total lifetime repayment", fontsize=13, fontweight="600", pad=10)
+salary_long["plan"] = salary_long["plan"].map({
+    "plan2_repaid": "Plan 2 (2012-2022)",
+    "plan5_repaid": "Plan 5 (2023+)",
+})
+salary_long["salary_k"] = salary_long["salary"] / 1000
+salary_long["repaid_k"] = salary_long["total_repaid"] / 1000
 
-# ── Panel 2: Years repaying by starting salary ──
-ax_years.plot(
-    salary_df["salary"] / 1000, salary_df["plan2_years"],
-    color=TEAL, linewidth=2.5, label="Plan 2",
+fig_salary = px.line(
+    salary_long,
+    x="salary_k",
+    y="repaid_k",
+    color="plan",
+    color_discrete_map={"Plan 2 (2012-2022)": TEAL, "Plan 5 (2023+)": AMBER},
+    labels={"salary_k": "Graduate starting salary (£k)", "repaid_k": "Total lifetime repayment (£k)", "plan": "Plan"},
+    title=f"Total lifetime repayment (£{LOAN_BALANCE // 1000}k loan)",
+    custom_data=["salary", "total_repaid"],
 )
-ax_years.plot(
-    salary_df["salary"] / 1000, salary_df["plan5_years"],
-    color=AMBER, linewidth=2.5, label="Plan 5",
+fig_salary.update_traces(
+    line=dict(width=2.5),
+    hovertemplate="Salary: £%{customdata[0]:,.0f}<br>Total repaid: £%{customdata[1]:,.0f}<extra>%{fullData.name}</extra>",
 )
-ax_years.axhline(30, color=TEAL, linewidth=0.8, linestyle=":", alpha=0.5)
-ax_years.axhline(40, color=AMBER, linewidth=0.8, linestyle=":", alpha=0.5)
-ax_years.text(69, 30.5, "30yr", fontsize=8, color=TEAL, alpha=0.7, ha="right")
-ax_years.text(69, 40.5, "40yr", fontsize=8, color=AMBER, alpha=0.7, ha="right")
-ax_years.set_xlabel("Graduate starting salary", fontsize=11)
-ax_years.set_ylabel("Years repaying", fontsize=11)
-ax_years.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"£{v:.0f}k"))
-ax_years.yaxis.grid(True, color="#f1f5f9", linewidth=1)
-ax_years.set_axisbelow(True)
-ax_years.legend(fontsize=9, frameon=True, framealpha=0.95, edgecolor="#e2e8f0")
-ax_years.set_title("Years of repayment", fontsize=13, fontweight="600", pad=10)
-
-# ── Panel 3: Plan 2 vs Plan 5 total repaid by income decile (PE microdata) ──
-x = np.arange(10)
-bw_d = 0.35
-ax_decile.bar(
-    x - bw_d / 2, decile_df["avg_plan2_repaid"] / 1000,
-    bw_d, color=TEAL, alpha=0.85, label="Plan 2",
+fig_salary.add_hline(
+    y=LOAN_BALANCE / 1000, line_dash="dash", line_color="#94a3b8", line_width=1,
+    annotation_text="Original loan", annotation_position="top left",
+    annotation_font_color="#94a3b8", annotation_font_size=11,
 )
-ax_decile.bar(
-    x + bw_d / 2, decile_df["avg_plan5_repaid"] / 1000,
-    bw_d, color=AMBER, alpha=0.85, label="Plan 5",
+fig_salary.update_xaxes(tickprefix="£", ticksuffix="k")
+fig_salary.update_yaxes(tickprefix="£", ticksuffix="k")
+fig_salary.update_layout(**LAYOUT_COMMON)
+
+fig_salary.write_html(f"{RESULTS_DIR}/panel_salary.html")
+fig_salary.write_image(f"{RESULTS_DIR}/panel_salary.png", width=800, height=500, scale=2)
+print(f"Saved {RESULTS_DIR}/panel_salary.html + panel_salary.png")
+
+# ── Panel 2: Years of repayment by starting salary ──
+years_long = salary_df.melt(
+    id_vars=["salary"],
+    value_vars=["plan2_years", "plan5_years"],
+    var_name="plan",
+    value_name="years",
 )
-ax_decile.set_xlabel("Income decile (household)", fontsize=11)
-ax_decile.set_ylabel("Total lifetime repayment (£k)", fontsize=11)
-ax_decile.set_xticks(x)
-ax_decile.set_xticklabels([str(d) for d in range(1, 11)])
-ax_decile.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"£{v:.0f}k"))
-ax_decile.yaxis.grid(True, color="#f1f5f9", linewidth=1)
-ax_decile.set_axisbelow(True)
-ax_decile.legend(fontsize=9, frameon=True, framealpha=0.95, edgecolor="#e2e8f0")
-ax_decile.set_title(
-    "Total lifetime repayment by income decile\n(average per borrower, Plan 2 vs Plan 5)",
-    fontsize=12, fontweight="600", pad=10,
+years_long["plan"] = years_long["plan"].map({
+    "plan2_years": "Plan 2 (2012-2022)",
+    "plan5_years": "Plan 5 (2023+)",
+})
+years_long["salary_k"] = years_long["salary"] / 1000
+
+fig_years = px.line(
+    years_long,
+    x="salary_k",
+    y="years",
+    color="plan",
+    color_discrete_map={"Plan 2 (2012-2022)": TEAL, "Plan 5 (2023+)": AMBER},
+    labels={"salary_k": "Graduate starting salary (£k)", "years": "Years repaying", "plan": "Plan"},
+    title=f"Years of repayment (£{LOAN_BALANCE // 1000}k loan)",
+    custom_data=["salary"],
 )
-
-# ── Panel 4: Typical graduate profiles ──
-profile_labels = []
-plan2_vals = []
-plan5_vals = []
-
-for label, sal in profiles:
-    p2 = simulate_lifetime(sal, LOAN_BALANCE, PLAN2, lambda s, t: plan2_interest_rate(s, t))
-    p5 = simulate_lifetime(sal, LOAN_BALANCE, PLAN5, lambda s, t: PLAN5["interest"])
-    profile_labels.append(f"{label}\n(£{sal//1000}k)")
-    plan2_vals.append(p2["total_repaid"] / 1000)
-    plan5_vals.append(p5["total_repaid"] / 1000)
-
-x_prof = np.arange(len(profiles))
-bw = 0.35
-ax_profiles.bar(x_prof - bw / 2, plan2_vals, bw, color=TEAL, alpha=0.85, label="Plan 2")
-ax_profiles.bar(x_prof + bw / 2, plan5_vals, bw, color=AMBER, alpha=0.85, label="Plan 5")
-# Annotate difference
-for i in range(len(profiles)):
-    diff = plan5_vals[i] - plan2_vals[i]
-    y_pos = max(plan2_vals[i], plan5_vals[i]) + 1
-    sign = "+" if diff > 0 else ""
-    ax_profiles.text(
-        x_prof[i], y_pos, f"{sign}£{diff:.0f}k",
-        ha="center", fontsize=9, fontweight="600",
-        color=AMBER if diff > 0 else TEAL,
-    )
-ax_profiles.set_ylabel("Total lifetime repayment (£k)", fontsize=11)
-ax_profiles.set_xticks(x_prof)
-ax_profiles.set_xticklabels(profile_labels, fontsize=9)
-ax_profiles.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f"£{v:.0f}k"))
-ax_profiles.yaxis.grid(True, color="#f1f5f9", linewidth=1)
-ax_profiles.set_axisbelow(True)
-ax_profiles.legend(fontsize=9, frameon=True, framealpha=0.95, edgecolor="#e2e8f0")
-ax_profiles.set_title("Typical graduate comparison", fontsize=13, fontweight="600", pad=10)
-
-# ── Suptitle and footer ──
-fig.suptitle(
-    "Plan 2 vs Plan 5: who pays more under the 2023 student loan reform?",
-    fontsize=16, fontweight="700", y=1.02,
+fig_years.update_traces(
+    line=dict(width=2.5),
+    hovertemplate="Salary: £%{customdata[0]:,.0f}<br>Years: %{y}<extra>%{fullData.name}</extra>",
 )
-fig.text(
-    0.5, -0.02,
-    f"PolicyEngine UK  |  £{LOAN_BALANCE//1000}k loan balance  |  "
-    f"Plan 2: £{PLAN2['threshold']:,.0f} threshold, {PLAN2['interest_min']*100:.1f}-{PLAN2['interest_max']*100:.1f}% interest, 30yr  |  "
-    f"Plan 5: £{PLAN5['threshold']:,.0f} threshold, {PLAN5['interest']*100:.1f}% interest, 40yr  |  "
-    f"3.5% salary growth",
-    ha="center", fontsize=8, color="#94a3b8",
+fig_years.add_hline(y=30, line_dash="dot", line_color=TEAL, line_width=1, opacity=0.5,
+                    annotation_text="30yr writeoff", annotation_position="top right",
+                    annotation_font_color=TEAL, annotation_font_size=11)
+fig_years.add_hline(y=40, line_dash="dot", line_color=AMBER, line_width=1, opacity=0.5,
+                    annotation_text="40yr writeoff", annotation_position="top right",
+                    annotation_font_color=AMBER, annotation_font_size=11)
+fig_years.update_xaxes(tickprefix="£", ticksuffix="k")
+fig_years.update_layout(**LAYOUT_COMMON)
+
+fig_years.write_html(f"{RESULTS_DIR}/panel_years.html")
+fig_years.write_image(f"{RESULTS_DIR}/panel_years.png", width=800, height=500, scale=2)
+print(f"Saved {RESULTS_DIR}/panel_years.html + panel_years.png")
+
+# ── Panel 3: Total repayment by household income decile (PE microdata) ──
+decile_long = decile_df.melt(
+    id_vars=["decile", "borrowers"],
+    value_vars=["avg_plan2_repaid", "avg_plan5_repaid"],
+    var_name="plan",
+    value_name="avg_repaid",
 )
+decile_long["plan"] = decile_long["plan"].map({
+    "avg_plan2_repaid": "Plan 2",
+    "avg_plan5_repaid": "Plan 5",
+})
+decile_long["repaid_k"] = decile_long["avg_repaid"] / 1000
+decile_long["decile_str"] = decile_long["decile"].astype(int).astype(str)
 
-plt.tight_layout()
-plt.savefig("policy_comparison.png", dpi=200, bbox_inches="tight", facecolor="white")
-print("\nSaved policy_comparison.png")
+fig_decile = px.bar(
+    decile_long,
+    x="decile_str",
+    y="repaid_k",
+    color="plan",
+    barmode="group",
+    color_discrete_map={"Plan 2": TEAL, "Plan 5": AMBER},
+    labels={"decile_str": "Household income decile", "repaid_k": "Avg. lifetime repayment per borrower (£k)", "plan": "Plan"},
+    title=f"Total lifetime repayment by household income decile (£{LOAN_BALANCE // 1000}k loan)",
+    custom_data=["avg_repaid", "borrowers"],
+)
+fig_decile.update_traces(
+    hovertemplate="Repaid: £%{customdata[0]:,.0f}<br>Borrowers: %{customdata[1]:,.0f}<extra>%{fullData.name}</extra>",
+    opacity=0.85,
+)
+fig_decile.update_yaxes(tickprefix="£", ticksuffix="k")
+fig_decile.update_layout(**LAYOUT_COMMON)
 
-# ── Save each panel as a separate PNG ──
-renderer = fig.canvas.get_renderer()
-panel_info = [
-    (ax_salary, "panel_salary.png"),
-    (ax_years, "panel_years.png"),
-    (ax_decile, "panel_decile.png"),
-    (ax_profiles, "panel_profiles.png"),
-]
-
-for ax, fname in panel_info:
-    extent = ax.get_tightbbox(renderer).transformed(fig.dpi_scale_trans.inverted())
-    fig.savefig(fname, dpi=200, bbox_inches=extent, facecolor="white")
-    print(f"Saved {fname}")
-
-plt.show()
+fig_decile.write_html(f"{RESULTS_DIR}/panel_decile.html")
+fig_decile.write_image(f"{RESULTS_DIR}/panel_decile.png", width=800, height=500, scale=2)
+print(f"Saved {RESULTS_DIR}/panel_decile.html + panel_decile.png")
