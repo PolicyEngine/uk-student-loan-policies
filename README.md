@@ -21,20 +21,6 @@ The headline interest rate is lower under Plan 5, but the extra 10 years of repa
 
 **The crossover point is around £38-40k starting salary.** Below this, Plan 5 costs more. Above this, Plan 5 costs less.
 
-## Charts
-
-### Total lifetime repayment by starting salary
-![Total lifetime repayment](panel_salary.png)
-
-### Years of repayment by starting salary
-![Years of repayment](panel_years.png)
-
-### Total lifetime repayment by household income decile
-![Repayment by income decile](panel_decile.png)
-
-### Typical graduate profiles
-![Typical graduate comparison](panel_profiles.png)
-
 ## How it works
 
 The model (`policy_comparison.py`) does the following:
