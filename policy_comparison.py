@@ -1,12 +1,13 @@
 """
-Plan 2 vs Plan 5: Who Pays More Under the 2023 Student Loan Reform?
+Badenoch vs Lewis: Two Fixes for Plan 2 Student Loans
 
-The 2023 reform replaced Plan 2 with Plan 5 for new English students.
-Key changes: lower threshold (£25k vs £29k), RPI-only interest (vs RPI+3%),
-but 40-year writeoff (vs 30 years). The extra 10 years convert many middle
-earners from "written off" to "full repayers".
+Martin Lewis and Kemi Badenoch agree Plan 2 is broken but propose different fixes:
+- Badenoch: Cap interest at RPI only (remove the +3% sliding scale)
+- Lewis: Raise the repayment threshold to £40k and index it (undo the freeze)
 
-Uses PolicyEngine UK for all parameters and microdata income distribution.
+These two levers help completely different segments of the income distribution.
+This analysis simulates three scenarios — status quo, Badenoch fix, Lewis fix —
+across the salary range to quantify who benefits.
 
 Run with: conda activate python313 && python policy_comparison.py
 """
@@ -17,53 +18,28 @@ warnings.filterwarnings("ignore")
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
+from policyengine_uk import CountryTaxBenefitSystem
 
-from policyengine_uk import Microsimulation
-
-
-# ── Load PolicyEngine UK parameters ──────────────────────────────────────────
+# ── Load Plan 2 baseline from PolicyEngine UK ────────────────────────────────
 YEAR = 2026
 
-print("Loading PolicyEngine UK...")
-baseline_sim = Microsimulation()
-tbs = baseline_sim.tax_benefit_system
+print("Loading PolicyEngine UK parameters...")
+tbs = CountryTaxBenefitSystem()
 params = tbs.parameters
 date = f"{YEAR}-01-01"
 sl = params.gov.hmrc.student_loans
 
-# Plan 2 parameters (from PE)
-PLAN2 = {
-    "name": "Plan 2",
-    "threshold": sl.thresholds.plan_2(date),
-    "repayment_rate": sl.repayment_rate(date),
-    "writeoff_years": 30,
-}
+_threshold = sl.thresholds.plan_2(date)
+_repayment_rate = sl.repayment_rate(date)
 
-# Plan 5 parameters (from PE)
-PLAN5 = {
-    "name": "Plan 5",
-    "threshold": sl.thresholds.plan_5(date),
-    "repayment_rate": sl.repayment_rate(date),
-    "writeoff_years": 40,
-}
-
-# Interest rates (PE or known fallbacks)
 try:
-    PLAN2["interest_min"] = sl.interest.plan_2.rate_below_threshold(date)
-    PLAN2["interest_max"] = sl.interest.plan_2.rate_above_threshold(date)
-    PLAN5["interest"] = sl.interest.plan_5.rate(date)
+    _interest_min = sl.interest.plan_2.rate_below_threshold(date)  # RPI
+    _interest_max = sl.interest.plan_2.rate_above_threshold(date)  # RPI+3%
 except (AttributeError, KeyError):
-    PLAN2["interest_min"] = 0.045   # RPI
-    PLAN2["interest_max"] = 0.078   # RPI + 3%
-    PLAN5["interest"] = 0.045       # RPI only
+    _interest_min = 0.045
+    _interest_max = 0.078
 
 INTEREST_UPPER = 49_530  # SLC upper earnings threshold for Plan 2 interest
-
-print(f"\nPolicyEngine UK parameters ({YEAR}):")
-print(f"  Plan 2: threshold £{PLAN2['threshold']:,.0f}, interest {PLAN2['interest_min']*100:.1f}%-{PLAN2['interest_max']*100:.1f}%, {PLAN2['writeoff_years']}yr writeoff")
-print(f"  Plan 5: threshold £{PLAN5['threshold']:,.0f}, interest {PLAN5['interest']*100:.1f}%, {PLAN5['writeoff_years']}yr writeoff")
-print(f"  Repayment rate: {PLAN2['repayment_rate']*100:.0f}%")
 
 # OBR RPI forecasts
 RPI_FORECASTS = {
@@ -80,18 +56,67 @@ def get_rpi(year):
     return RPI_FORECASTS.get(year, RPI_LONG_TERM)
 
 
-def plan2_interest_rate(salary, threshold):
+def sliding_interest(salary, threshold):
     """Plan 2 sliding-scale interest: RPI at threshold, RPI+3% at upper."""
     if salary <= threshold:
-        return PLAN2["interest_min"]
+        return _interest_min
     if salary >= INTEREST_UPPER:
-        return PLAN2["interest_max"]
-    return PLAN2["interest_min"] + (PLAN2["interest_max"] - PLAN2["interest_min"]) * (
+        return _interest_max
+    return _interest_min + (_interest_max - _interest_min) * (
         (salary - threshold) / (INTEREST_UPPER - threshold)
     )
 
 
-def simulate_lifetime(starting_salary, loan_balance, plan_params, interest_fn):
+def rpi_only_interest(salary, threshold):
+    """Badenoch fix: flat RPI interest regardless of income."""
+    return _interest_min
+
+
+# ── Three scenarios (all Plan 2, 30yr writeoff, 9% repayment rate) ───────────
+
+STATUS_QUO = {
+    "name": "Status quo",
+    "threshold": _threshold,           # £29,385
+    "repayment_rate": _repayment_rate,
+    "writeoff_years": 30,
+    "interest_fn": sliding_interest,
+    "threshold_index_from": 2030,       # frozen 2027-2029, RPI from 2030
+}
+
+BADENOCH = {
+    "name": "Badenoch fix (cap interest)",
+    "threshold": _threshold,           # £29,385
+    "repayment_rate": _repayment_rate,
+    "writeoff_years": 30,
+    "interest_fn": rpi_only_interest,
+    "threshold_index_from": 2030,       # same freeze as status quo
+}
+
+LEWIS = {
+    "name": "Lewis fix (raise threshold)",
+    "threshold": 40_000,
+    "repayment_rate": _repayment_rate,
+    "writeoff_years": 30,
+    "interest_fn": sliding_interest,    # keeps sliding scale
+    "threshold_index_from": 2027,       # indexed from 2027 (no freeze)
+}
+
+SCENARIOS = [STATUS_QUO, BADENOCH, LEWIS]
+
+print(f"\nPolicyEngine UK parameters ({YEAR}):")
+print(f"  Plan 2 threshold: £{_threshold:,.0f}")
+print(f"  Interest range: {_interest_min*100:.1f}% – {_interest_max*100:.1f}%")
+print(f"  Repayment rate: {_repayment_rate*100:.0f}%")
+print(f"\nThree scenarios:")
+for sc in SCENARIOS:
+    print(f"  {sc['name']}: threshold £{sc['threshold']:,.0f}, "
+          f"indexed from {sc['threshold_index_from']}, "
+          f"interest={'sliding' if sc['interest_fn'] is sliding_interest else 'RPI only'}")
+
+
+# ── Simulation engine ────────────────────────────────────────────────────────
+
+def simulate_lifetime(starting_salary, loan_balance, plan_params):
     """Simulate year-by-year loan repayment. Returns dict with lifetime metrics."""
     balance = loan_balance
     total_repaid = 0
@@ -100,6 +125,8 @@ def simulate_lifetime(starting_salary, loan_balance, plan_params, interest_fn):
     threshold = plan_params["threshold"]
     writeoff = plan_params["writeoff_years"]
     rate = plan_params["repayment_rate"]
+    interest_fn = plan_params["interest_fn"]
+    index_from = plan_params["threshold_index_from"]
     years_repaying = 0
 
     for yr in range(1, writeoff + 1):
@@ -108,16 +135,11 @@ def simulate_lifetime(starting_salary, loan_balance, plan_params, interest_fn):
 
         cal_year = YEAR + yr
 
-        # Threshold indexation: Plan 2 frozen 2027-2029, RPI from 2030+
-        # Plan 5: assume RPI indexation throughout (per current policy)
-        if plan_params["name"] == "Plan 2":
-            if cal_year >= 2030:
-                threshold *= 1 + get_rpi(cal_year)
-        else:
-            if cal_year >= 2027:
-                threshold *= 1 + get_rpi(cal_year)
+        # Threshold indexation
+        if cal_year >= index_from:
+            threshold *= 1 + get_rpi(cal_year)
 
-        # Repayment first
+        # Repayment
         repayment = max(0, (salary - threshold) * rate)
         actual = min(repayment, balance)
         balance -= actual
@@ -143,117 +165,27 @@ def simulate_lifetime(starting_salary, loan_balance, plan_params, interest_fn):
     }
 
 
-# ── 1. Salary sweep: Plan 2 vs Plan 5 by starting salary ─────────────────────
+# ── 1. Salary sweep ─────────────────────────────────────────────────────────
 print("\nSimulating lifetime repayments across salary range...")
 
 salaries = np.arange(20_000, 120_001, 100)
 results_by_salary = []
 
 for sal in salaries:
-    p2 = simulate_lifetime(
-        sal, LOAN_BALANCE, PLAN2,
-        lambda s, t: plan2_interest_rate(s, t),
-    )
-    p5 = simulate_lifetime(
-        sal, LOAN_BALANCE, PLAN5,
-        lambda s, t: PLAN5["interest"],
-    )
-    results_by_salary.append({
-        "salary": sal,
-        "plan2_repaid": p2["total_repaid"],
-        "plan5_repaid": p5["total_repaid"],
-        "plan2_years": p2["years_repaying"],
-        "plan5_years": p5["years_repaying"],
-        "plan2_paid_off": p2["paid_off"],
-        "plan5_paid_off": p5["paid_off"],
-        "plan2_written_off": p2["written_off"],
-        "plan5_written_off": p5["written_off"],
-        "extra_repaid": p5["total_repaid"] - p2["total_repaid"],
-        "extra_years": p5["years_repaying"] - p2["years_repaying"],
-    })
+    row = {"salary": sal}
+    for sc in SCENARIOS:
+        key = sc["name"].split()[0].lower()  # "status", "badenoch", "lewis"
+        r = simulate_lifetime(sal, LOAN_BALANCE, sc)
+        row[f"{key}_repaid"] = r["total_repaid"]
+        row[f"{key}_years"] = r["years_repaying"]
+        row[f"{key}_paid_off"] = r["paid_off"]
+        row[f"{key}_written_off"] = r["written_off"]
+    results_by_salary.append(row)
 
 salary_df = pd.DataFrame(results_by_salary)
 
 
-# ── 2. PolicyEngine microdata: distributional effect by income decile ─────────
-print("Loading PE microdata for income distribution...")
-
-person_income = baseline_sim.calculate("employment_income", YEAR)
-person_decile = baseline_sim.calculate("household_income_decile", YEAR, map_to="person")
-person_plan = baseline_sim.calculate("student_loan_plan", YEAR)
-weights = person_income.weights
-
-incomes = person_income.values
-plans = person_plan.values
-deciles = person_decile.values
-
-# Simulate for all borrowers (Plan 2 + Plan 5)
-has_loan = (plans == "PLAN_2") | (plans == "PLAN_5")
-has_income = incomes > 0
-borrower_mask = has_loan & has_income
-
-print(f"  Simulating {borrower_mask.sum()} borrowers...")
-
-extra_repaid = np.zeros(len(incomes))
-plan2_repaid_arr = np.zeros(len(incomes))
-plan5_repaid_arr = np.zeros(len(incomes))
-plan2_years_arr = np.zeros(len(incomes))
-plan5_years_arr = np.zeros(len(incomes))
-
-for idx in np.where(borrower_mask)[0]:
-    inc = incomes[idx]
-    p2 = simulate_lifetime(inc, LOAN_BALANCE, PLAN2, lambda s, t: plan2_interest_rate(s, t))
-    p5 = simulate_lifetime(inc, LOAN_BALANCE, PLAN5, lambda s, t: PLAN5["interest"])
-    plan2_repaid_arr[idx] = p2["total_repaid"]
-    plan5_repaid_arr[idx] = p5["total_repaid"]
-    plan2_years_arr[idx] = p2["years_repaying"]
-    plan5_years_arr[idx] = p5["years_repaying"]
-    extra_repaid[idx] = p5["total_repaid"] - p2["total_repaid"]
-
-# Aggregate by income decile
-decile_results = []
-for d in range(1, 11):
-    mask = (deciles == d) & borrower_mask
-    w = weights[mask]
-    total_w = w.sum()
-    if total_w == 0:
-        decile_results.append({
-            "decile": d, "avg_extra_repaid": 0,
-            "avg_plan2_repaid": 0, "avg_plan5_repaid": 0,
-            "avg_plan2_years": 0, "avg_plan5_years": 0,
-            "borrowers": 0, "total_extra": 0,
-        })
-        continue
-
-    decile_results.append({
-        "decile": d,
-        "avg_extra_repaid": (extra_repaid[mask] * w).sum() / total_w,
-        "avg_plan2_repaid": (plan2_repaid_arr[mask] * w).sum() / total_w,
-        "avg_plan5_repaid": (plan5_repaid_arr[mask] * w).sum() / total_w,
-        "avg_plan2_years": (plan2_years_arr[mask] * w).sum() / total_w,
-        "avg_plan5_years": (plan5_years_arr[mask] * w).sum() / total_w,
-        "borrowers": total_w,
-        "total_extra": (extra_repaid[mask] * w).sum() / 1e6,
-    })
-
-decile_df = pd.DataFrame(decile_results)
-
-print("\n=== Plan 5 vs Plan 2: Extra Lifetime Repayment by Income Decile ===")
-print(f"{'Decile':<8} {'Extra repaid':>14} {'P2 years':>10} {'P5 years':>10} {'Borrowers':>12}")
-print("-" * 58)
-for _, r in decile_df.iterrows():
-    print(
-        f"  {int(r['decile']):<6} "
-        f"£{r['avg_extra_repaid']:>10,.0f}   "
-        f"{r['avg_plan2_years']:>8.1f}   "
-        f"{r['avg_plan5_years']:>8.1f}   "
-        f"{r['borrowers']:>10,.0f}"
-    )
-total_extra = decile_df["total_extra"].sum()
-print(f"\n  Total extra repaid under Plan 5: £{total_extra:,.0f}m")
-
-
-# ── 3. Typical graduate profiles ──────────────────────────────────────────────
+# ── 2. Typical graduate profiles ─────────────────────────────────────────────
 print("\n=== Typical Graduate Profiles ===")
 profiles = [
     ("Low earner", 25_000),
@@ -263,24 +195,33 @@ profiles = [
 ]
 
 for label, sal in profiles:
-    p2 = simulate_lifetime(sal, LOAN_BALANCE, PLAN2, lambda s, t: plan2_interest_rate(s, t))
-    p5 = simulate_lifetime(sal, LOAN_BALANCE, PLAN5, lambda s, t: PLAN5["interest"])
-    diff = p5["total_repaid"] - p2["total_repaid"]
     print(f"\n  {label} (£{sal:,} starting salary):")
-    print(f"    Plan 2: repays £{p2['total_repaid']:,.0f} over {p2['years_repaying']} years"
-          f"{' (paid off)' if p2['paid_off'] else f' (£{p2['written_off']:,.0f} written off)'}")
-    print(f"    Plan 5: repays £{p5['total_repaid']:,.0f} over {p5['years_repaying']} years"
-          f"{' (paid off)' if p5['paid_off'] else f' (£{p5['written_off']:,.0f} written off)'}")
-    print(f"    Difference: {'£' + f'{diff:,.0f} MORE' if diff > 0 else '£' + f'{abs(diff):,.0f} LESS'} under Plan 5")
+    for sc in SCENARIOS:
+        r = simulate_lifetime(sal, LOAN_BALANCE, sc)
+        status = "(paid off)" if r["paid_off"] else f"(£{r['written_off']:,.0f} written off)"
+        print(f"    {sc['name']}: repays £{r['total_repaid']:,.0f} over {r['years_repaying']} years {status}")
 
 
-# ── 4. Plot (Plotly Express) ──────────────────────────────────────────────────
+# ── 4. Charts ────────────────────────────────────────────────────────────────
 import os
 RESULTS_DIR = "results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-TEAL = "#319795"   # PolicyEngine primary
-AMBER = "#F59E0B"  # Contrast
+SLATE = "#94a3b8"   # Status quo
+TEAL = "#319795"     # Badenoch (interest cap)
+AMBER = "#F59E0B"    # Lewis (threshold raise)
+
+PLOT_LABELS = {
+    "status": "Status quo",
+    "badenoch": "Cap interest at RPI",
+    "lewis": "Raise threshold to £40k",
+}
+
+COLOR_MAP = {
+    "Status quo": SLATE,
+    "Cap interest at RPI": TEAL,
+    "Raise threshold to £40k": AMBER,
+}
 
 LAYOUT_COMMON = dict(
     plot_bgcolor="white",
@@ -294,13 +235,14 @@ LAYOUT_COMMON = dict(
 # ── Panel 1: Total lifetime repayment by starting salary ──
 salary_long = salary_df.melt(
     id_vars=["salary"],
-    value_vars=["plan2_repaid", "plan5_repaid"],
-    var_name="plan",
+    value_vars=["status_repaid", "badenoch_repaid", "lewis_repaid"],
+    var_name="scenario",
     value_name="total_repaid",
 )
-salary_long["plan"] = salary_long["plan"].map({
-    "plan2_repaid": "Plan 2 (2012-2022)",
-    "plan5_repaid": "Plan 5 (2023+)",
+salary_long["scenario"] = salary_long["scenario"].map({
+    "status_repaid": "Status quo",
+    "badenoch_repaid": "Cap interest at RPI",
+    "lewis_repaid": "Raise threshold to £40k",
 })
 salary_long["salary_k"] = salary_long["salary"] / 1000
 salary_long["repaid_k"] = salary_long["total_repaid"] / 1000
@@ -309,10 +251,10 @@ fig_salary = px.line(
     salary_long,
     x="salary_k",
     y="repaid_k",
-    color="plan",
-    color_discrete_map={"Plan 2 (2012-2022)": TEAL, "Plan 5 (2023+)": AMBER},
-    labels={"salary_k": "Graduate starting salary (£k)", "repaid_k": "Total lifetime repayment (£k)", "plan": "Plan"},
-    title=f"Total lifetime repayment (£{LOAN_BALANCE // 1000}k loan)",
+    color="scenario",
+    color_discrete_map=COLOR_MAP,
+    labels={"salary_k": "Graduate starting salary (£k)", "repaid_k": "Total lifetime repayment (£k)", "scenario": "Scenario"},
+    title=f"Total lifetime repayment (£{LOAN_BALANCE // 1000}k loan, Plan 2)",
     custom_data=["salary", "total_repaid"],
 )
 fig_salary.update_traces(
@@ -320,7 +262,7 @@ fig_salary.update_traces(
     hovertemplate="Salary: £%{customdata[0]:,.0f}<br>Total repaid: £%{customdata[1]:,.0f}<extra>%{fullData.name}</extra>",
 )
 fig_salary.add_hline(
-    y=LOAN_BALANCE / 1000, line_dash="dash", line_color="#94a3b8", line_width=1,
+    y=LOAN_BALANCE / 1000, line_dash="dash", line_color="#cbd5e1", line_width=1,
     annotation_text="Original loan", annotation_position="top left",
     annotation_font_color="#94a3b8", annotation_font_size=11,
 )
@@ -330,18 +272,19 @@ fig_salary.update_layout(**LAYOUT_COMMON)
 
 fig_salary.write_html(f"{RESULTS_DIR}/panel_salary.html")
 fig_salary.write_image(f"{RESULTS_DIR}/panel_salary.png", width=800, height=500, scale=2)
-print(f"Saved {RESULTS_DIR}/panel_salary.html + panel_salary.png")
+print(f"\nSaved {RESULTS_DIR}/panel_salary.html + panel_salary.png")
 
 # ── Panel 2: Years of repayment by starting salary ──
 years_long = salary_df.melt(
     id_vars=["salary"],
-    value_vars=["plan2_years", "plan5_years"],
-    var_name="plan",
+    value_vars=["status_years", "badenoch_years", "lewis_years"],
+    var_name="scenario",
     value_name="years",
 )
-years_long["plan"] = years_long["plan"].map({
-    "plan2_years": "Plan 2 (2012-2022)",
-    "plan5_years": "Plan 5 (2023+)",
+years_long["scenario"] = years_long["scenario"].map({
+    "status_years": "Status quo",
+    "badenoch_years": "Cap interest at RPI",
+    "lewis_years": "Raise threshold to £40k",
 })
 years_long["salary_k"] = years_long["salary"] / 1000
 
@@ -349,61 +292,22 @@ fig_years = px.line(
     years_long,
     x="salary_k",
     y="years",
-    color="plan",
-    color_discrete_map={"Plan 2 (2012-2022)": TEAL, "Plan 5 (2023+)": AMBER},
-    labels={"salary_k": "Graduate starting salary (£k)", "years": "Years repaying", "plan": "Plan"},
-    title=f"Years of repayment (£{LOAN_BALANCE // 1000}k loan)",
+    color="scenario",
+    color_discrete_map=COLOR_MAP,
+    labels={"salary_k": "Graduate starting salary (£k)", "years": "Years repaying", "scenario": "Scenario"},
+    title=f"Years of repayment (£{LOAN_BALANCE // 1000}k loan, Plan 2)",
     custom_data=["salary"],
 )
 fig_years.update_traces(
     line=dict(width=2.5),
     hovertemplate="Salary: £%{customdata[0]:,.0f}<br>Years: %{y}<extra>%{fullData.name}</extra>",
 )
-fig_years.add_hline(y=30, line_dash="dot", line_color=TEAL, line_width=1, opacity=0.5,
+fig_years.add_hline(y=30, line_dash="dot", line_color="#cbd5e1", line_width=1, opacity=0.5,
                     annotation_text="30yr writeoff", annotation_position="top right",
-                    annotation_font_color=TEAL, annotation_font_size=11)
-fig_years.add_hline(y=40, line_dash="dot", line_color=AMBER, line_width=1, opacity=0.5,
-                    annotation_text="40yr writeoff", annotation_position="top right",
-                    annotation_font_color=AMBER, annotation_font_size=11)
+                    annotation_font_color="#94a3b8", annotation_font_size=11)
 fig_years.update_xaxes(tickprefix="£", ticksuffix="k")
 fig_years.update_layout(**LAYOUT_COMMON)
 
 fig_years.write_html(f"{RESULTS_DIR}/panel_years.html")
 fig_years.write_image(f"{RESULTS_DIR}/panel_years.png", width=800, height=500, scale=2)
 print(f"Saved {RESULTS_DIR}/panel_years.html + panel_years.png")
-
-# ── Panel 3: Total repayment by household income decile (PE microdata) ──
-decile_long = decile_df.melt(
-    id_vars=["decile", "borrowers"],
-    value_vars=["avg_plan2_repaid", "avg_plan5_repaid"],
-    var_name="plan",
-    value_name="avg_repaid",
-)
-decile_long["plan"] = decile_long["plan"].map({
-    "avg_plan2_repaid": "Plan 2",
-    "avg_plan5_repaid": "Plan 5",
-})
-decile_long["repaid_k"] = decile_long["avg_repaid"] / 1000
-decile_long["decile_str"] = decile_long["decile"].astype(int).astype(str)
-
-fig_decile = px.bar(
-    decile_long,
-    x="decile_str",
-    y="repaid_k",
-    color="plan",
-    barmode="group",
-    color_discrete_map={"Plan 2": TEAL, "Plan 5": AMBER},
-    labels={"decile_str": "Household income decile", "repaid_k": "Avg. lifetime repayment per borrower (£k)", "plan": "Plan"},
-    title=f"Total lifetime repayment by household income decile (£{LOAN_BALANCE // 1000}k loan)",
-    custom_data=["avg_repaid", "borrowers"],
-)
-fig_decile.update_traces(
-    hovertemplate="Repaid: £%{customdata[0]:,.0f}<br>Borrowers: %{customdata[1]:,.0f}<extra>%{fullData.name}</extra>",
-    opacity=0.85,
-)
-fig_decile.update_yaxes(tickprefix="£", ticksuffix="k")
-fig_decile.update_layout(**LAYOUT_COMMON)
-
-fig_decile.write_html(f"{RESULTS_DIR}/panel_decile.html")
-fig_decile.write_image(f"{RESULTS_DIR}/panel_decile.png", width=800, height=500, scale=2)
-print(f"Saved {RESULTS_DIR}/panel_decile.html + panel_decile.png")

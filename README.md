@@ -1,43 +1,43 @@
-# Plan 2 vs Plan 5: Who Pays More Under the 2023 Student Loan Reform?
+# Badenoch vs Lewis: Two Fixes for Plan 2 Student Loans
 
-The 2023 reform replaced **Plan 2** with **Plan 5** for new university students in England. Following the [public clash between Martin Lewis and Kemi Badenoch](https://www.theguardian.com/money/2025/feb/20/why-the-student-loans-row-is-escalating-and-what-it-means-for-graduates) over whether the new system is fairer, this analysis uses [PolicyEngine UK](https://policyengine.org/uk) microdata to quantify who actually pays more and who pays less.
+Martin Lewis and Kemi Badenoch agree Plan 2 is broken but propose different fixes. Following their [clash on GMB](https://www.theguardian.com/money/2025/feb/20/why-the-student-loans-row-is-escalating-and-what-it-means-for-graduates), this analysis simulates lifetime repayment under each proposed fix to quantify who benefits.
 
-## Background
+## The two fixes
 
-| | Plan 2 (2012-2022 starters) | Plan 5 (2023+ starters) |
-|---|---|---|
-| **Repayment threshold** | £29,385 | £25,000 |
-| **Interest rate** | RPI + up to 3% (sliding scale) | RPI only |
-| **Write-off period** | 30 years | 40 years |
-| **Repayment rate** | 9% above threshold | 9% above threshold |
+| | Status quo (current Plan 2) | Badenoch fix | Lewis fix |
+|---|---|---|---|
+| **Repayment threshold** | £29,385 | £29,385 | £40,000 |
+| **Interest rate** | RPI + up to 3% (sliding scale) | RPI only (flat) | RPI + up to 3% (sliding scale) |
+| **Threshold indexation** | Frozen 2027–2029, RPI from 2030 | Frozen 2027–2029, RPI from 2030 | RPI-indexed from 2027 (no freeze) |
+| **Write-off period** | 30 years | 30 years | 30 years |
+| **Repayment rate** | 9% above threshold | 9% above threshold | 9% above threshold |
 
-The headline interest rate is lower under Plan 5, but the extra 10 years of repayment convert many middle earners from "written off" to "full repayers" -- substantially increasing their lifetime cost.
+- **Badenoch** wants to cap Plan 2 interest at RPI only, removing the +3% sliding scale that penalises higher earners.
+- **Lewis** wants to raise the repayment threshold to £40k and index it annually, undoing the freeze that drags in lower earners.
 
 ## Key findings
 
-**Low and middle earners repay significantly more under Plan 5.** A median graduate (£30k starting salary) repays roughly £44k more over their lifetime. The lower threshold and 40-year term outweigh the lower interest rate.
+**The Badenoch fix (interest cap) primarily helps higher earners.** Those on £50k+ starting salaries see the biggest reduction in lifetime repayment, because they're the ones hit hardest by the RPI+3% interest rate. Lower earners — whose loans are written off anyway — barely notice the change.
 
-**High earners repay less under Plan 5.** A £55k starter saves around £58k, because the RPI-only interest dramatically reduces the balance they accrue compared to Plan 2's RPI+3%.
+**The Lewis fix (threshold raise) primarily helps low and middle earners.** Raising the threshold to £40k means graduates earning below that pay nothing, and those just above it pay far less per year. Higher earners, who comfortably clear their loans either way, see little difference.
 
-**The crossover point is around £38-40k starting salary.** Below this, Plan 5 costs more. Above this, Plan 5 costs less.
+**The two fixes are near-complementary** — they target opposite ends of the income distribution.
 
 ## How it works
 
 The model (`policy_comparison.py`) does the following:
 
-1. **Loads Plan 2 and Plan 5 parameters** from PolicyEngine UK (thresholds, interest rates, repayment rates)
-2. **Simulates year-by-year loan repayment** for each plan, accounting for salary growth (3.5%/yr), OBR RPI forecasts, threshold indexation rules, and the Plan 2 interest sliding scale
-3. **Sweeps across starting salaries** (£20k-£120k) to show how outcomes vary by earnings
-4. **Uses PolicyEngine UK microdata** to distribute results across the actual income distribution, weighted by household income decile
-5. **Generates three interactive chart panels** as HTML (with hover) and static PNGs
+1. **Defines three scenarios** — status quo, Badenoch fix (RPI-only interest), Lewis fix (£40k threshold, indexed)
+2. **Simulates year-by-year loan repayment** for each scenario, accounting for salary growth (3.5%/yr), OBR RPI forecasts, and threshold indexation rules
+3. **Sweeps across starting salaries** (£20k–£120k) to show how outcomes vary by earnings
+4. **Generates two interactive chart panels** as HTML (with hover) and static PNGs
 
 ### Assumptions
 
-- £45,000 loan balance
+- £45,000 loan balance (typical Plan 2 graduate)
 - 3.5% annual salary growth
-- OBR RPI forecasts (2024-2029), then 2.39% long-term
-- Plan 2 threshold frozen 2027-2029, RPI-indexed from 2030
-- Plan 5 threshold RPI-indexed from 2027
+- OBR RPI forecasts (2024–2029), then 2.39% long-term
+- 30-year write-off for all three scenarios
 
 ## Running
 
@@ -47,9 +47,8 @@ python policy_comparison.py
 ```
 
 Outputs saved to `results/` (interactive HTML + static PNG):
-- `results/panel_salary.html` / `.png` -- total lifetime repayment by starting salary
-- `results/panel_years.html` / `.png` -- years of repayment by starting salary
-- `results/panel_decile.html` / `.png` -- avg. lifetime repayment per borrower by household income decile (Plan 2 vs Plan 5)
+- `results/panel_salary.html` / `.png` — total lifetime repayment by starting salary (3 lines)
+- `results/panel_years.html` / `.png` — years of repayment by starting salary (3 lines)
 
 ## Media context
 
@@ -60,5 +59,4 @@ Outputs saved to `results/` (interactive HTML + static PNG):
 
 ## Built with
 
-- [PolicyEngine UK](https://policyengine.org/uk) -- tax-benefit microsimulation model and microdata
 - Python, NumPy, pandas, Plotly
