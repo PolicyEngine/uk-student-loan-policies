@@ -6,7 +6,7 @@ Martin Lewis and Kemi Badenoch agree Plan 2 is broken but propose different fixe
 - Lewis: Raise the repayment threshold to £40k and index it (undo the freeze)
 
 These two levers help completely different segments of the income distribution.
-This analysis simulates three scenarios — status quo, Badenoch fix, Lewis fix —
+This analysis simulates three scenarios — current system, Badenoch fix, Lewis fix —
 across the salary range to quantify who benefits.
 
 Run with: conda activate python313 && python policy_comparison.py
@@ -75,7 +75,7 @@ def rpi_only_interest(salary, threshold):
 # ── Three scenarios (all Plan 2, 30yr writeoff, 9% repayment rate) ───────────
 
 STATUS_QUO = {
-    "name": "Status quo",
+    "name": "Current system",
     "threshold": _threshold,           # £29,385
     "repayment_rate": _repayment_rate,
     "writeoff_years": 30,
@@ -89,7 +89,7 @@ BADENOCH = {
     "repayment_rate": _repayment_rate,
     "writeoff_years": 30,
     "interest_fn": rpi_only_interest,
-    "threshold_index_from": 2030,       # same freeze as status quo
+    "threshold_index_from": 2030,       # same freeze as current system
 }
 
 LEWIS = {
@@ -242,18 +242,18 @@ import os
 RESULTS_DIR = "results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-SLATE = "#94a3b8"   # Status quo
+SLATE = "#94a3b8"   # Current system
 TEAL = "#319795"     # Badenoch (interest cap)
 AMBER = "#F59E0B"    # Lewis (threshold raise)
 
 PLOT_LABELS = {
-    "status": "Status quo",
+    "status": "Current system",
     "badenoch": "Cap interest at RPI",
     "lewis": "Raise threshold to £40k",
 }
 
 COLOR_MAP = {
-    "Status quo": SLATE,
+    "Current system": SLATE,
     "Cap interest at RPI": TEAL,
     "Raise threshold to £40k": AMBER,
 }
@@ -270,12 +270,12 @@ LAYOUT_COMMON = dict(
 # ── Panel 1: Total lifetime repayment by starting salary ──
 salary_long = salary_df.melt(
     id_vars=["salary"],
-    value_vars=["status_repaid", "badenoch_repaid", "lewis_repaid"],
+    value_vars=["current_repaid", "badenoch_repaid", "lewis_repaid"],
     var_name="scenario",
     value_name="total_repaid",
 )
 salary_long["scenario"] = salary_long["scenario"].map({
-    "status_repaid": "Status quo",
+    "current_repaid": "Current system",
     "badenoch_repaid": "Cap interest at RPI",
     "lewis_repaid": "Raise threshold to £40k",
 })
@@ -312,12 +312,12 @@ print(f"\nSaved {RESULTS_DIR}/panel_salary.html + panel_salary.png")
 # ── Panel 2: Years of repayment by starting salary ──
 years_long = salary_df.melt(
     id_vars=["salary"],
-    value_vars=["status_years", "badenoch_years", "lewis_years"],
+    value_vars=["current_years", "badenoch_years", "lewis_years"],
     var_name="scenario",
     value_name="years",
 )
 years_long["scenario"] = years_long["scenario"].map({
-    "status_years": "Status quo",
+    "current_years": "Current system",
     "badenoch_years": "Cap interest at RPI",
     "lewis_years": "Raise threshold to £40k",
 })
@@ -347,9 +347,9 @@ fig_years.write_html(f"{RESULTS_DIR}/panel_years.html")
 fig_years.write_image(f"{RESULTS_DIR}/panel_years.png", width=800, height=500, scale=2)
 print(f"Saved {RESULTS_DIR}/panel_years.html + panel_years.png")
 
-# ── Panel 3: Savings vs status quo by starting salary ──
-salary_df["badenoch_saving"] = salary_df["status_repaid"] - salary_df["badenoch_repaid"]
-salary_df["lewis_saving"] = salary_df["status_repaid"] - salary_df["lewis_repaid"]
+# ── Panel 3: Savings vs current system by starting salary ──
+salary_df["badenoch_saving"] = salary_df["current_repaid"] - salary_df["badenoch_repaid"]
+salary_df["lewis_saving"] = salary_df["current_repaid"] - salary_df["lewis_repaid"]
 
 savings_long = salary_df.melt(
     id_vars=["salary"],
@@ -371,7 +371,7 @@ fig_savings = px.line(
     color="scenario",
     color_discrete_map=COLOR_MAP,
     labels={"salary_k": "Graduate starting salary (£k)", "saving_k": "Reduction in lifetime repayment (£k)", "scenario": "Scenario"},
-    title=f"Reduction in lifetime loan repayment vs status quo (£{LOAN_BALANCE // 1000}k loan, Plan 2)",
+    title=f"Reduction in lifetime loan repayment vs current system (£{LOAN_BALANCE // 1000}k loan, Plan 2)",
     custom_data=["salary", "saving"],
 )
 fig_savings.update_traces(
